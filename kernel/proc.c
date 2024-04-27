@@ -126,7 +126,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->tracemask=0;
   return p;
 }
 
@@ -276,6 +276,8 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
+
+  np->tracemask=p->tracemask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
