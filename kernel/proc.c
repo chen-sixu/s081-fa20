@@ -695,3 +695,19 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint64
+get_nproc(void)
+{
+  uint64 nporc=0;
+  struct proc *temp_proc;
+  temp_proc=proc;
+  for(temp_proc=proc;temp_proc<&proc[NPROC];temp_proc++)
+  {
+    acquire(&temp_proc->lock);
+    if (temp_proc->state!=UNUSED)
+      nporc++;
+    release(&temp_proc->lock);
+  }
+  return nporc;
+}
