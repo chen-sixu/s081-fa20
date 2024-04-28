@@ -163,9 +163,9 @@ syscall(void)
   int num;
   struct proc *p = myproc();
 
-  num = p->trapframe->a7;
+  num = p->trapframe->a7; //a7 stores syscall_number
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    p->trapframe->a0 = syscalls[num]();
+    p->trapframe->a0 = syscalls[num](); //sys_call return value
     if (p->tracemask&(1<<num))
     {
       printf("%d: syscall %s -> %d\n",p->pid,sysnames[num-1],p->trapframe->a0);
