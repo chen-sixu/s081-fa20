@@ -440,3 +440,36 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+/*
+print the message of current pagetable
+in order to record the level,we need a help function
+*/
+
+void vmprint_helper(pagetable_t pagetable,int layer)
+{
+  for (int i = 0; i < 512; i++)
+  {
+    char* index[] = 
+    {
+      "..",
+      ".. ..",
+      ".. .. .."
+    };
+    pte_t pte = pagetable[i];
+    if (pte & PTE_V)
+    { //this pte is valid
+      printf("%s%d: pte %p pa %p\n",index[layer],i,pte,PTE2PA(pte));
+      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0)
+      { //this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      vmprint_helper((pagetable_t)child,layer+1);
+      }
+    }
+  }
+}
+void vmprint(pagetable_t pagetable)
+{
+  printf("page table %p\n",pagetable);
+  vmprint_helper(pagetable,0);
+}
