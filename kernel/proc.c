@@ -34,12 +34,12 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+      // p->kstack = va;
   }
   kvminithart();
 }
@@ -113,6 +113,15 @@ found:
     return 0;
   }
 
+  // a new kernel page table
+  p->kernel_pt=new_kvminit();
+  if (p->kernel_pt == 0)
+  {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -120,7 +129,12 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  new_kvmmap(p->kernel_pt, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -140,7 +154,19 @@ freeproc(struct proc *p)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable)
+  {  
     proc_freepagetable(p->pagetable, p->sz);
+  } 
+
+  //mind the sequence of these function
+  //first unmap,then release it
+  uvmunmap(p->kernel_pt,p->kstack,1,1);
+  if (p->kernel_pt)
+  {
+    proc_free_kernel_pt(p->kernel_pt);
+  }
+  
+  p->kstack=0;
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -193,6 +219,26 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
+}
+
+void
+proc_free_kernel_pt(pagetable_t kernel_pt)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++)
+  {
+    pte_t pte = kernel_pt[i];
+    if(pte & PTE_V)
+    {
+      kernel_pt[i]=0;
+      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0)
+      {
+      uint64 child = PTE2PA(pte);
+      proc_free_kernel_pt((pagetable_t)child);
+      }
+    }
+  }
+  kfree((void*)kernel_pt);
 }
 
 // a user program that calls exec("/init")
@@ -473,8 +519,11 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        w_satp(MAKE_SATP(p->kernel_pt));
+        sfence_vma();
         swtch(&c->context, &p->context);
 
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
