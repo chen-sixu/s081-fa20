@@ -116,6 +116,15 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
+  if (new_uvmcopy(p->pagetable,p->kernel_pt,0,p->sz)<0)
+  {
+    goto bad;
+  }
+  
+  //when we load a new process,we shoukld update satp register
+  w_satp(MAKE_SATP(p->kernel_pt));
+  sfence_vma();
+
   if(p->pid==1) 
     vmprint(p->pagetable);
 

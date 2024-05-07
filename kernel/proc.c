@@ -267,6 +267,9 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  // also include the first process's user pagetable in its kernel pagebtle
+  new_uvmcopy(p->pagetable,p->kernel_pt,0,p->sz);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -288,13 +291,30 @@ growproc(int n)
   struct proc *p = myproc();
 
   sz = p->sz;
-  if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+  if(n > 0)
+  {
+    if((sz+n>PLIC) ||(sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) 
+    {
       return -1;
     }
-  } else if(n < 0){
+    if (new_uvmcopy(p->pagetable,p->kernel_pt,p->sz,sz)<0)
+    {
+      return -1;
+    }
+    
+  } 
+  else if(n < 0)
+  {
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+
+    if (sz<p->sz)
+    {
+      int temp=(PGROUNDUP(p->sz) - PGROUNDUP(sz)) / PGSIZE;
+      uvmunmap(p->kernel_pt,PGROUNDUP(sz),temp,0); //release kernel pagetable
+    }
   }
+  w_satp(MAKE_SATP(p->kernel_pt));
+  sfence_vma();   
   p->sz = sz;
   return 0;
 }
@@ -321,6 +341,14 @@ fork(void)
   }
   np->sz = p->sz;
 
+  //Copy user pagetable to kernel pagetable.
+  if (new_uvmcopy(np->pagetable,np->kernel_pt,0,np->sz)<0)
+  {
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  
   np->parent = p;
 
   // copy saved user registers.
