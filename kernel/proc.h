@@ -93,6 +93,11 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
+  int interval;                // alarm period
+  void (*handler)();           // pointer of alarm handler
+  int tick_cnt;                // how many tick since last call
+  struct trapframe *saver_trapframe; // save user register and spec when return from handler to user code
+  int in_alarm;               // don't repeatly in alarm
 
   // these are private to the process, so p->lock need not be held.
   uint64 kstack;               // Virtual address of kernel stack
