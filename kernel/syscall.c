@@ -68,6 +68,31 @@ int
 argaddr(int n, uint64 *ip)
 {
   *ip = argraw(n);
+  struct proc *p=myproc();
+  uint64 va=*ip;
+  if (walkaddr(p->pagetable,va)==0) // current va hasn't mapped to a pa
+  {
+    if (PGROUNDUP(p->trapframe->sp)-1 < va && p->sz> va)
+    // current va is between allocated memory and p->sz.
+    // in this case,we need lazy allocation.
+    {
+      uint64 ka = (uint64) kalloc();
+      if (ka==0)
+      { 
+        return -1;
+      }
+      memset((void *)ka,0,PGSIZE);
+      if (mappages(p->pagetable,PGROUNDDOWN(va),PGSIZE,ka,PTE_W|PTE_R|PTE_X|PTE_U)!=0)
+      {
+        kfree((void *)ka);
+        return -1;
+      }
+    }
+    else
+    {
+      return -1;
+    }
+  }
   return 0;
 }
 
